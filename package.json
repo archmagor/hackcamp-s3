@@ -8,6 +8,7 @@
     "check": "tsx scripts/check.ts"
   },
   "dependencies": {
+    "dotenv": "^18.0.8",
     "viem": "^2.57.5"
   },
   "devDependencies": {
