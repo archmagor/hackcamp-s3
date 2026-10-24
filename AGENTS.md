@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project
-兽医诊所的管制药物采购 agent：库存用完才能采购，agent 经 MCP 与供应商通信，通信中实时核验 FDA 召回 / DEA 注册。当前阶段：spike（W1）→ MVP（W2）→ polish（W3）。
+OddsGate：agent 驱动受监管商业的合规轨，首垂直欧洲足球博彩数据。server agent 按次卖三类数据（赔率快照 / 球队状态 / 胜平负概率），client agent 自主询价购买；x402 V2 sponsored 结算（sponsor 代付 CCD 手续费、买方只付 EUDemo）；四门校验（Registry 问责 / 委托证明属性复验 / 额度 / 链上独立复核），身份用 Concordium Verify and Access 组合 ZKP（age≥18 + 持牌辖区 + 绑 agent），卖方不接触 PII。当前阶段：spike（W1）→ MVP（W2）→ polish（W3）。
 产品说明见 docs/03-brief.md，开工前先读它。
 
 ## Stack（已验证可用的版本，不要擅自升级）

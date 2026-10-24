@@ -1,42 +1,42 @@
-# Brief：VetGate
+# Brief：OddsGate
 
 ## 定位
-为兽医诊所在让 AI agent 自动补货管制药物时，改善 agent 囤积超购、误采召回批次、对接未注册供应商的合规风险，同时把人工跟单交给 agent，兽医只做一次确认；
-相较人工采购（没有独立于任何一方的授权与消耗记录，无法安全引入自动化）与一般 agent 方案（限额写在 prompt / 后端 policy，可被绕过、事后难追溯），关键差异是“库存低于安全线才由合约解锁一次性采购授权、授权同交易消耗、每笔经兽医签名确认”，由合约强制执行；本次用 testnet 完整采购流程 + 一条被合约拒绝的非法采购证明。
+为跑自主 client agent 参与受监管消费（首垂直：欧洲足球博彩数据）的用户，改善 agent 无人监督购买时的合规准入与授权问责风险：卖方不接触 PII 即可核验买方"已成年 + 持牌辖区居民"，agent 每笔购买密码学绑定到人类的一次首次授权，付款走 sponsored（买方不持 CCD、只付标价），成交与授权全链上可独立审计、可随时撤销；
+相较现有 agent 支付方案（只做付钱通道、合规靠后端 policy 或人工 KYC、卖方要么接触 PII 要么留合规缺口），关键差异是"零知识身份门禁 + 委托证明第三方复验 + sponsored 结算 + agent 问责"四者组合，由链上锚定（VRA/VAA）与 Agent Registry 强制；本次用 testnet 完整跑通"首次授权 → 自主购买四门校验 → x402 sponsored 结算 → 独立复核留痕"，并给出至少一条门校验失败被拒（无链上动作、无资金变动）的负向用例。
 
 ## 目标赛事
 - 主赛 / 赛道：Concordium Trusted Agents Hackathon（不设赛道、无 bounty）。
-- 截止（北京时间）：2026-12-10（周四）07:59；Checkpoint 1 = 2026-11-23（周一）07:59；开发窗口 11/19 开启，约 3 周。
+- 截止（北京时间）：2026-12-10（周四）07:59；Checkpoint 1 = 2026-11-23（周一）07:59；开赛 11-02、build window 11-19 开启、评审 12-10~12-11。
 - 硬条件：跑在 Concordium testnet；提交项目说明 + public 仓库 + demo 视频 ≤3 分钟 + CCDExplorer 链接 + path to production；可带现有 agent，单人 / 团队均可、免费。
-- 必需集成：≥1 个 Concordium 组件（Concordium ID / Verify and Access、Agent Registry badge、x402、PLT、sponsored tx、MCP server）；SDK 用 concordium-node-sdk-js。
+- 必需集成：≥1 个 Concordium 组件（Concordium ID / Verify and Access、Agent Registry badge、x402、PLT、sponsored tx、MCP server）；OddsGate 目标覆盖六项，**已实测命中 4 项**（x402 + sponsored + PLT/EUDemo + Agent Registry #974，另用托管 MCP 只读核实），Verify and Access 待钱包 E2E。SDK：Concordium 侧 concordium-node-sdk-js / @concordium/web-sdk；x402 官方包 @x402/concordium@2.28.0（scheme ccd:*，含 client/server/facilitator）——**无公共 Concordium facilitator，需自建 / 自托管**（官方 TS 或自建 Rust，W1 选型验证）。
 
 ## 约束
 - 时间：每天 __ 小时，共 3 周
 - 我熟悉的：
-- 我不熟悉、需要验证的：
-- 预算（模型 / 服务 / gas）：
+- 我不熟悉、需要验证的：Verify and Access 委托证明的第三方复验语义、钱包出组合证明 + ContextString 绑 agent 的 UX、凭证吊销后的复验行为
+- 预算（模型 / 服务 / gas）：testnet CCD（faucet 免费）；VRA/VAA 两笔由 server（verifier 钥）自付；结算手续费由 sponsor 代付
 
 ## 一条核心流程（用户视角，5 步以内）
-1. 兽医日常用药，某管制药物库存降到安全线以下
-2. 合约解锁一张一次性采购授权；库存充裕时链上无授权，agent 想囤也发不出采购请求
-3. agent 经 MCP 与供应商 agent 通信，实时核对 FDA 召回 / DEA 注册，召回批次 / 未注册供应商出局；生成的采购单需兽医一次点击签名才生效
-4. 兽医签名后，agent 用该授权发起 x402 支付，授权在链上同交易内被消耗
-5. 兽医收到回执；授权的发行与消耗都在链上，审计方可独立重放，无需信任任何一方日志
+1. 真人首次授权（只一次）：连接 Concordium 钱包出组合 ZKP（age≥18 + 持牌辖区 + ContextString 绑 client agent token id），拿到审计记录（委托证明），VRA/VAA 上链；开零钱账户充 EUDemo、Registry 登记为 agentWallet；此后真人退出
+2. agent 无凭据询价 → server 回 `402 PaymentRequired`（价格 + 身份 / 结算条款）
+3. agent 用零钱账户钥签 sender 半签，携 `X-PAYMENT` + `X-IDENTITY-PROOF` 重试同一请求
+4. server 过四门（①问责 ②属性复验 ③额度 ④链上独立复核），facilitator 补 sponsor 签、广播、代付 CCD 手续费
+5. agent 收到数据产品 + 结算凭据；成交写入 `/sales` 审计账本，CCDExplorer 上可独立查证
 
 ## 链上做什么、为什么必须在链上
-- 链上动作：① 权限（核心）—— 采购授权的发行与消耗，库存低于安全线由合约解锁、一次性、消耗后才允许采购；② 记录 —— 授权消耗与采购结果留痕；③ 身份（边缘）—— 兽医对采购单的签名确认。不在链上：FDA / DEA 核验（链下 API）、x402 支付发起（HTTP 层，settle 由 facilitator 上链）；但“核验通过 → 授权发行 → 授权消耗”的绑定在链上。
-- 为什么必须在链上：约束需同时绑定双方 —— agent 后端可被绕过、供应商有利益冲突、诊所自有数据库可被单方修改，只有合约对各方同时强制；且授权消耗记录可被审计方独立重放，不依赖任何一方日志。若此约束退回后端（见未知项①），差异化不成立。
+- 链上动作：① 结算（核心）—— x402 V2 sponsored，EUDemo PLT 从 agentWallet 转商户，sponsor 代付 CCD 手续费，即时模式按笔上链；② 身份锚定 —— VRA（验证请求摘要上链，防事后伪造请求）+ VAA（审计摘要上链，留公开可核存证）；③ 问责 —— Agent Registry CIS-8004 / CIS-8 记录 agent 注册、状态（active/suspended/revoked）、跨链密钥绑定与 badge。不在链上：赔率数据（静态 fixture）、四门判定逻辑（server 侧，但门①查链上 agent 状态、门②回链复验审计记录）、`/sales` 账本（链下，引用链上 tx hash）；dob / 居住国原值永不出钱包。
+- 为什么必须在链上：结算涉及买方 agent / 卖方 / sponsor 三方互不信任，资金转移须中立强制，且 sponsored 让买方无需持 CCD；委托证明的可信度依赖 VRA/VAA 先上链存证（纯链下验证记录可被单方篡改）；agent 撤销要跨 server 生效，必须靠全局中立的 Registry 状态。若身份锚定与问责退回后端，"不接触 PII 的可复验合规门禁"差异化不成立（见未知项①）。
 
 ## 本次做 / 延后 / 不承诺
-- 做：诊所侧采购 agent + 授权合约（安全线解锁 / 一次性消耗）+ MCP 核验（openFDA / DEA）+ x402 结算（结算资产待定：CCD / PLT，W1 验证）；供应商 agent 为自建演示对手方，提交时如实标注
-- 延后：紧急采购路径（兽医签名随时签发授权）、真实供应商接入、多诊所 / 多角色
-- 不承诺：主网部署；对真实世界 DEA 合规效力的声明（testnet 演示不构成法律合规）
+- 做：三 SKU 商品目录（odds-snapshot / team-status / match-probability，统一 0.1 EUDemo）+ 静态赔率源（demo 标注模拟）；四门校验骨架；首次授权页（钱包出组合证明 + VRA/VAA 锚定）；betting-agent（client 侧三级预算 + 域名白名单 + JSONL 消费记账）；x402 V2 sponsored EUDemo 结算 + merchant 独立复核 + 防重放；卖方 Registry 注册 + badge；负向矩阵（门①②③拒绝，无链上动作、无资金变动）
+- 延后（P2）：挂账结算 tab / flush（IOU 记账、批量上链、memo = tab 清单哈希）；买方 Registry 注册演示；撤销路径端到端演示
+- 不承诺：主网部署；对真实世界博彩合规效力的声明（testnet 数据 + 测试身份属性，不构成真实合规结论）；PLT 批量操作（单笔多转）、浏览器钱包付款、PLL
 
 ## 最大的未知项（按风险排序）
-1. 一次性采购授权的“同交易消耗”语义能否在 Concordium 合约层表达 —— 若不能，约束退化为后端签名 + nonce，差异化消失
-2. Agent Registry badge 与 x402 在 Concordium 侧的实际接入方式与文档成熟度；badge 是否支持“诊所 → agent”的一次性授权 —— 若不支持，授权链断裂
-3. openFDA / DEA 注册 API 的实时性、限流与数据新鲜度 —— “实时核对”是核心流程第 3 步的前提
+1. 委托证明的第三方复验语义 —— server 能否凭 client 每笔携带的审计记录（request + presentation + VRA/VAA tx hash）复验其有效性，Verify and Access 是否支持"已存审计记录被第三方复验"而非仅一次性在线验证；若不支持，门②退化为后端签名 + nonce，差异化消失
+2. 钱包出组合证明 + ContextString 绑定 agent token id 的 UX 是否可用 —— 钱包无"只签不广播"API，付款签名者为 client agent，身份签名者为钱包，二者边界须成立
+3. 账户凭证吊销后，已锚定审计记录的事后复验是否回链查吊销状态 —— 撤销语义（P1 用真钱包 + 真吊销实测）；兜底 = 新鲜度窗口 30 天 + 换钥 + Registry 状态
 
 ## 验收条件
-- 成功：一条命令在 testnet 跑通核心流程 5 步 —— 安全线解锁授权 → MCP 实时核验（真实 openFDA / DEA 数据）→ 兽医签名 → x402 支付、授权同交易消耗 → CCDExplorer 上可独立查证；另有至少一条无授权采购被合约拒绝；提交物齐（public 仓库、demo ≤3 分钟、CCDExplorer 链接、项目说明）
-- 失败时应有的行为：无授权 → 合约拒绝，交易不打包；FDA / DEA 数据不可达 → 采购中止并明确报错，不降级、不用 mock 数据冒充；兽医不签名 → 采购单不生效、授权不消耗
+- 成功：一条命令在 testnet 跑通核心流程 5 步 —— 首次授权出组合证明（VRA/VAA 上链）→ 自主购买过四门 → x402 sponsored EUDemo 结算（sponsor 代付 CCD）→ merchant 独立复核 → CCDExplorer 上可独立查证；另有至少一条门校验失败被拒（门①②③任一不过 → 402 + reason，无链上动作、无资金变动）；提交物齐（public 仓库、demo ≤3 分钟、CCDExplorer 链接、项目说明）
+- 失败时应有的行为：agent 未注册 / 被吊销 → 门①拒（`agent_not_registered` / `agent_inactive`）；委托证明复验不过 / 绑定不符 / 过期 → 门②拒（`identity_verification_failed` / `identity_binding_mismatch` / `identity_proof_stale`）；sender ≠ agentWallet → 门③拒（`payer_not_agent_wallet`）；链上独立复核不符 → `on_chain_audit_failed`，不交付；verifier 钥缺失 → fail-closed 拒售；数据源不可达 → 明确报错或标注 "demo data"，不用 mock 冒充真实结果

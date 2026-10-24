@@ -1,6 +1,6 @@
-# tech notes：x402（VetGate 采购支付调研）
+# tech notes：x402（OddsGate 结算调研）
 
-> 信息来源与时效：`x402.org`、`github.com/coinbase/x402`（README）、`docs.x402.org/getting-started/quickstart-for-buyers`、repo 示例 `examples/typescript/clients/fetch`、npm registry 实查 —— 全部抓取于 2026-10-15。**仓库已迁移：coinbase/x402 → [x402-foundation/x402](https://github.com/x402-foundation/x402)**（x402 Foundation，Linux Foundation 运营）；coinbase 仓库现为 development fork。
+> 信息来源与时效：`x402.org`、`github.com/coinbase/x402`（README）、`docs.x402.org/getting-started/quickstart-for-buyers`、repo 示例 `examples/typescript/clients/fetch`、npm registry 实查 —— 全部抓取于 2026-10-15。**仓库已迁移：coinbase/x402 → [x402-foundation/x402](https://github.com/x402-foundation/x402)**（x402 Foundation，Linux Foundation 运营）；coinbase 仓库现为 development fork。**更新（2026-10-20）**：以下 §3 / §4 多处原标"未确认"项，已由 hackcamp-ccd/HACKATHON.md §9.1.1（从 npm 包源码扒出 + 真实 testnet 交易）核实，见各条标注。
 
 ## 1. 版本与安装（以 npm 实查为准，2026-10-15）
 
@@ -10,7 +10,7 @@
 | `@x402/evm` | 2.28.0 | EVM 机制（exact / upto / auth-capture） |
 | `@x402/fetch` | 2.28.0 | fetch 包装客户端 |
 | `@x402/express` | 2.28.0 | 服务端中间件 |
-| `@x402/concordium` | 未实查版本，安装命令见下 | **官方 Concordium scheme，买家 quickstart 明确列出** |
+| `@x402/concordium` | 2.28.0（2026-09-29，HACKATHON.md §9.1.1 核实） | **官方 Concordium scheme**；依赖 `@concordium/web-sdk ^12`；导出 client / server / **facilitator** 三件套 |
 | `x402-axios` | 1.2.1 | 旧 v1 包，v2 勿混用 |
 
 ```bash
@@ -69,7 +69,7 @@ client.register("ccd:*", new ExactConcordiumScheme(concordiumSigner));
 | EVM 侧 | `EVM_PRIVATE_KEY`（环境变量）+ 测试网 USDC | quickstart 仅说 "wallet with USDC"，未给 faucet 链接；Base Sepolia USDC 走 Coinbase 官方 faucet |
 | EVM 可选 | `EVM_RPC_URL`（例 `https://sepolia.base.org`） | 启用 gas sponsoring 扩展（EIP-2612 / ERC-20 approval） |
 | Concordium 侧 | `CCD_ADDRESS` + `CCD_PRIVATE_KEY`（basic account signer） | test CCD 从 Concordium testnet faucet 领（选赛卡已确认免费） |
-| facilitator | 客户端 SDK 不需要 key；verify/settle 由 resource server 或 facilitator 完成 | 官方 EVM facilitator 走 Coinbase CDP；**Concordium 的 facilitator 支持情况文档未写 → 未确认** |
+| facilitator | 客户端 SDK 不需要 key；verify/settle 由 facilitator 完成 | 官方 EVM facilitator 走 Coinbase CDP；**Concordium 无公共 facilitator → 必须自建**（`@x402/concordium` 导出 `./exact/facilitator`；sponsor 私钥走 `CCD_FACILITATOR_ADDRESS`/`CCD_FACILITATOR_PRIVATE_KEY`，hex Ed25519）。已核实（HACKATHON.md §9.1.1） |
 
 ## 4. 官方已知限制 + 与 Brief 的冲突
 
@@ -79,10 +79,10 @@ client.register("ccd:*", new ExactConcordiumScheme(concordiumSigner));
 - scheme 决定行为：`exact`（固定价）/ `upto`（按用量）/ `batch-settlement`（escrow 批量结算），示例中另有 `auth-capture`
 
 **与 Brief 的冲突（按严重度）**：
-1. **"授权在链上同交易内被消耗" vs x402 结算模型** —— x402 的 settle 是一笔独立资产转账（USDC transferWithAuthorization / CCD 转账），交易里没有调用我方授权合约的钩子。"同交易消耗"在 x402 流程内做不到。可行改法：两笔交易（先消耗授权合约，再 x402 支付），用 lifecycle hook `onBeforePaymentCreation` 串联；代价是两步之间可能失败 → 需要补偿/回滚设计。**直接动摇验收条件"授权同交易消耗"与未知项①的表述，需改 Brief 或改验收口径**。
-2. **拓扑差异** —— Brief 是"agent ↔ 供应商 agent 经 MCP 双向通信"；x402 是"client → resource server 的 HTTP 付费"。好消息：官方有 MCP client 示例（`examples/typescript/clients/mcp`），MCP server 可作为收费资源。demo 里供应商侧应设计为"x402 收费的 MCP 资源服务"，而非对等对话 agent。Brief 第 3 步措辞需意识到这点。
-3. **Concordium scheme 存在但细节缺位** —— `ccd:*` 注册方式官方有；但测试网 network 标识符写法、结算资产（CCD 原生 vs CIS-2/PLT）、facilitator 是否支持 Concordium settle 均未在 quickstart 出现。未知项②聚焦调整为：**装 `@x402/concordium` 跑通 `ccd:*` 测试网付费请求**。
-4. **$1 默认单笔上限** —— demo 需调 `maxAmountPerPayment`；顺带注意默认只认 USD-pegged 资产，Concordium 网络上的"认可资产"是什么未确认。
+1. **x402 settle 是独立资产转账，交易内无调用业务合约的钩子** —— settle 只是一笔资产转移（CCD `transfer` / PLT `tokenUpdate`），没法在同一笔里"消耗授权"或调我方合约。**对 OddsGate 的影响已消解**：OddsGate 不依赖"同交易消耗"，改用委托证明（审计记录）+ 四门校验（问责 / 属性复验 / 额度 / 链上独立复核）在 HTTP 层做准入，settle 仅负责结算。（旧 VetGate 的"授权同交易消耗"模型才与此冲突，已弃用。事实来源：HACKATHON.md §9.1.1）
+2. **拓扑：OddsGate 天然贴合 x402** —— OddsGate 是 client agent → server agent 的 HTTP 按次付费（询价 402 → 携 `X-PAYMENT` 重试 → 交付），正是 x402 的原生模型，无拓扑冲突。MCP 在 OddsGate 里只用于门①问责（经托管 MCP 只读查 Agent Registry 注册 / 状态 / 绑定），不是付费通道。（旧 VetGate 的"agent↔供应商 MCP 双向通信"才需把供应商设计成 x402 收费 MCP 资源，已不适用）
+3. **Concordium scheme 细节（已核实，HACKATHON.md §9.1.1）** —— 现行 **V2 形态**：client 只部分签名（不上链、不付 gas），facilitator 补 sponsor 签名并广播（取代旧 `{txHash, sender}` V1 形态）。CAIP-2：testnet `ccd:4221332d34e1694168c2a0c0b3fd0f27`、mainnet `ccd:9dd9ca4d19e9393877d2c44b70f89acb`、wildcard `ccd:*`。结算资产：CCD 走 `transfer`（不带 memo）、PLT 走 `tokenUpdate`，**decimals 一律链上 `getTokenInfo` 取、不信任服务端**（防恶意低报）。EUDemo（PLT，decimals 6）已实测走通（tx `2b040e71…`）。
+4. **$1 默认单笔上限** —— demo 需调 `maxAmountPerPayment`；默认只认 USD-pegged 资产。Concordium 侧结算资产已核实为 **EUDemo（PLT，decimals 6、allow_list=true）**，另有 CCD 原生（`CCD_DECIMALS=6`）；USDR 仍无余额。（HACKATHON.md §9.3）
 
 ## 5. 凭记忆 vs 当前文档不一致
 
@@ -90,7 +90,7 @@ client.register("ccd:*", new ExactConcordiumScheme(concordiumSigner));
 |---|---|---|
 | 仓库归属 | coinbase/x402 | x402-foundation/x402（Linux Foundation 下的 x402 Foundation） |
 | 包名 | 无 scope：`x402-axios`、`x402-express` | 全部 `@x402/*` scope；旧包仍在但属 v1 |
-| HTTP header | `X-PAYMENT` / `X-PAYMENT-RESPONSE` | `PAYMENT-SIGNATURE` / `PAYMENT-REQUIRED` / `PAYMENT-RESPONSE` |
+| HTTP header | `X-PAYMENT` / `X-PAYMENT-RESPONSE` | ⚠️ **两份调研冲突**：本行原记为 `PAYMENT-SIGNATURE`/`PAYMENT-REQUIRED`/`PAYMENT-RESPONSE`（10-15 抓 quickstart）；但 HACKATHON.md §9.1.1（10-20，扒 npm 包源码）+ idea-oddsgate（真实 testnet 交易）均用 **`X-PAYMENT`（标准 base64 JSON）/ `X-PAYMENT-RESPONSE`**。**以 `X-PAYMENT` 为准**（Concordium exact scheme），旧记法待复核 |
 | 客户端 API | `wrapFetchWithPayment(fetch, walletClient, config)` 直收 viem walletClient | `x402Client` + `register(network, scheme)`，scheme 按链拆包 |
 | 支持链 | Base 为主（EVM）+ 后加 Solana | 12+：EVM 全兼容、Solana、Stellar、Algorand、Aptos、Keeta、Hedera、**Concordium**、TON、NEAR、XRPL |
 | spend controls | 无此概念 | 默认只认 USD-pegged 资产 + $1/笔上限 |
